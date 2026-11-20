@@ -10,6 +10,7 @@ area chat stays within the area.
 | Global 1 | Shared server at `localexile-chat.duckdns.org:6113` |
 | Global 2 | Discord, active once the route has a channel ID and the Gateway has a bot token |
 | Global 8 | Simulated chat |
+| Trade 8 | Simulated trade feed |
 | Undefined Global and Trade channels | Local chat |
 
 ## Configure channels
@@ -29,6 +30,7 @@ mod reads `data/mods/globalchat.json`. The Gateway reloads the mod after either 
 
 ```json
 {
+  "enableTraderBots": true,
   "discordBotToken": "",
   "fallbackRoute": { "type": "blank" },
   "globalChannels": {
@@ -37,7 +39,7 @@ mod reads `data/mods/globalchat.json`. The Gateway reloads the mod after either 
     "8": { "type": "fake" }
   },
   "tradeChannels": {
-    "2": { "type": "server", "address": "chat.example.net", "port": 6114 }
+    "8": { "type": "fake" }
   }
 }
 ```
@@ -106,9 +108,48 @@ Simulated chat starts automatically when a player listens in a room configured w
 its embedded chat library once all simulated rooms are empty. To disable simulation for a channel, change that
 channel's route in the mod settings.
 
+Ambient Global chat matches the category mix of a Global chat capture, with about four in five lines sent as standalone
+posts. Short conversations retain the template's speakers and timing and run for two or three lines. Replies to player
+messages are triggered separately.
+
+Trader bots offer randomly rolled equipment on simulated channels. Each player sees their own offers. Whisper the
+trader `buy` or `invite` while the listing is active to get a trade invitation. Asking `price?` checks the offer.
+Automatic equipment offers and named quotes share [trade-listing-examples.json](trade-listing-examples.json). Each
+entry selects a `BaseName` for rolled gear or a `UniqueName` from the server's unique catalog, with a `Currency` and
+`Amount`. Set `AutoAdvertise` to `false` for request-only stock. `BuybackAmount` enables a fixed buyback in the same
+currency. `MinimumLevel` sets the buyer's minimum character level, and `Aliases` add names players can use when
+requesting or selling that item.
+The invitation arrives about 0.8 seconds after agreement. Accept it within 25 seconds, then place your payment
+in the trade window and confirm within 45 seconds. The item goes to your main inventory. Trader bots are unavailable in Solo Self-Found.
+
+Set `"enableTraderBots": false` in `globalchat.json` or turn off **Trader bots** in Waypoint to disable them server-wide.
+In game, use `/tradebots off` to stop ads and quotes for your character and cancel any open bot trade.
+Use `/tradebots on` to opt back in when the server setting allows it, or `/tradebots status` to check.
+Your in-game choice follows the character across areas until GlobalChat reloads or the server restarts.
+
+Ask for **Tabula Rasa** in a Global channel to get a private quote for **5 Chaos Orbs** after 3–6 seconds.
+`Tabular Rasa` also works. Whisper `okay` for an invite, then offer 5 Chaos Orbs in one stack or across several stacks.
+
+Use `WTB <item name>` to request listed uniques or eligible equipment by base name. Use `WTS <item name>`
+or `WTS` followed by one item link to sell eligible equipment from your main inventory. Traders quote
+their own prices, including 4 Chaos Orbs for a Tabula Rasa buyback. Follow the whisper and confirm the
+trade to sell the exact item quoted. The trader sends a private thank-you after the exchange succeeds.
+Trades use currency items from your main inventory. Most gear is priced in Chaos Orbs. Better rolls can be quoted in
+Exalted or Divine Orbs, and exceptional endgame quotes can ask for a Mirror of Kalandra. If payment or space is missing,
+fix it and whisper the trader again while the quote is active. If the item being sold has changed or left your
+main inventory, post a new `WTS` with the item linked to get a fresh quote. You can place items in the offer and take
+them back. Hover over the bot's items to unlock the client's Accept button. The bot confirms only the exact quoted
+item or currency total, with no extras. Cancelling returns your offer to your inventory.
+
+On simulated Trade routes, the feed uses variable gaps calibrated to about two or three posts per active minute.
+Service ads make up most of the feed and include boss carries, voidstones, and five-way runs. Advertisers can repost
+the same line under the same character name. Service ads are chat-only. Equipment ads remain tradable, and requests
+accept shorthand such as `WTB TABULA 15c`, `WTS 30c <item>`, and `<item> WTS`. Traders send their own quotes.
+
 ## Compatibility
 
 - **Required** — Merge the LocalExile server PR from `pr/globalchat-hooks` before the GlobalChat expansion PR.
+- The local trader-bot branch also requires the server's virtual trade isolation support from `work/trader-bots`.
 - **Optional** — Waypoint's `pr/mod-channel-settings` PR adds the channel controls in **Mods → GlobalChat → Settings**.
   You can also edit `globalchat.json` directly.
 

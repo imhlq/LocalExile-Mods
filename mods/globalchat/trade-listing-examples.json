@@ -1,0 +1,19 @@
+[
+  { "BaseName": "Iron Hat", "Currency": "Chaos Orb", "Amount": 2 },
+  { "BaseName": "Iron Greaves", "Currency": "Chaos Orb", "Amount": 2 },
+  { "BaseName": "Iron Ring", "Currency": "Chaos Orb", "Amount": 2 },
+  { "BaseName": "Coral Ring", "Currency": "Chaos Orb", "Amount": 2 },
+  { "BaseName": "Paua Amulet", "Currency": "Chaos Orb", "Amount": 3 },
+  { "BaseName": "Leather Belt", "Currency": "Chaos Orb", "Amount": 3 },
+  { "BaseName": "Gold Amulet", "Currency": "Chaos Orb", "Amount": 5 },
+  { "BaseName": "Sorcerer Boots", "Currency": "Exalted Orb", "Amount": 1 },
+  {
+    "UniqueName": "Tabula Rasa",
+    "Currency": "Chaos Orb",
+    "Amount": 5,
+    "BuybackAmount": 4,
+    "AutoAdvertise": false,
+    "Aliases": ["Tabula", "Tabular Rasa", "TabulaRasa", "TabularRasa"]
+  },
+  { "UniqueName": "Goldrim", "Currency": "Chaos Orb", "Amount": 6, "MinimumLevel": 5, "AutoAdvertise": true }
+]

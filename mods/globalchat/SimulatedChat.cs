@@ -1,29 +1,12 @@
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
-using System.IO.Compression;
 using GameServer.Core.Chat;
 using GameServer.Core.Protocol.Instance;
 
 namespace GlobalChat;
 
-sealed record GlobalChatGroup(string Id, double Weight, string[] Messages);
-sealed record GlobalChatLibrary(GlobalChatGroup[] Groups, GlobalChatBurst[] Bursts);
-
-sealed record GlobalChatBurstLine(
-    [property: JsonPropertyName("speaker")] int Speaker,
-    [property: JsonPropertyName("delay_s")] int DelaySeconds,
-    [property: JsonPropertyName("group")] string Group,
-    [property: JsonPropertyName("text")] string Text);
-
-sealed record GlobalChatBurst(
-    [property: JsonPropertyName("lines")] GlobalChatBurstLine[] Lines);
-
-[JsonSerializable(typeof(GlobalChatLibrary))]
-sealed partial class SimulatedChatJsonContext : JsonSerializerContext;
-
 /// <summary>Fake chat simulation for configured rooms with listeners.</summary>
-sealed class SimulatedChat(ChatChannelRouting routing, Action<string> log) : IDisposable
+sealed class SimulatedChat(ChatChannelRouting routing, Action<string> log, bool simulateTrade = true) : IDisposable
 {
     sealed class FakeChatRoom(DateTime now)
     {
@@ -36,11 +19,9 @@ sealed class SimulatedChat(ChatChannelRouting routing, Action<string> log) : IDi
     long _chatTick;
     readonly Queue<string> _recentChatMessages = new();
     readonly Queue<string> _recentChatSpeakers = new();
-    GlobalChatGroup[] _chatGroups = [];
     Dictionary<string, GlobalChatGroup> _chatGroupById = new(StringComparer.OrdinalIgnoreCase);
     Dictionary<string, List<(string Group, string Text)>> _chatKeywordIndex = new(StringComparer.OrdinalIgnoreCase);
-    double[] _chatGroupCumulative = [];
-    GlobalChatBurst[] _chatBursts = [];
+    AmbientChatModel? _ambientChat;
     readonly Lock gate = new();
     readonly Random _random = new();
     readonly CancellationTokenSource stop = new();
@@ -78,17 +59,17 @@ sealed class SimulatedChat(ChatChannelRouting routing, Action<string> log) : IDi
 
     bool EnsureGlobalChatLoaded()
     {
-        if (_chatLoadAttempted) return _chatGroups.Length > 0;
+        if (_chatLoadAttempted) return _ambientChat is not null;
         _chatLoadAttempted = true;
-        var (groups, bursts) = LoadGlobalChatLibrary(log);
-        if (groups.Length == 0) return false;
-        _chatGroups = groups;
-        _chatBursts = bursts;
+        GlobalChatLibrary library;
+        try { (library, _ambientChat) = AmbientChatModel.Load(); }
+        catch (Exception error) when (error is IOException or InvalidDataException or JsonException or FormatException)
+        {
+            log($"failed to load simulated chat: {error.Message}");
+            return false;
+        }
+        var groups = library.Groups;
         _chatGroupById = groups.ToDictionary(g => g.Id, StringComparer.OrdinalIgnoreCase);
-        _chatGroupCumulative = new double[groups.Length];
-        double sum = 0;
-        for (int i = 0; i < groups.Length; i++)
-            _chatGroupCumulative[i] = sum += Math.Max(0.001, groups[i].Weight);
 
         foreach (var g in groups)
         {
@@ -107,7 +88,7 @@ sealed class SimulatedChat(ChatChannelRouting routing, Action<string> log) : IDi
             }
         }
 
-        log($"loaded simulated chat ({groups.Length} groups, {groups.Sum(g => g.Messages.Length)} messages, {bursts.Length} conversation bursts)");
+        log($"loaded simulated chat ({groups.Length} groups, {groups.Sum(g => g.Messages.Length)} messages, {library.Bursts.Length} conversation templates)");
         return true;
     }
 
@@ -118,9 +99,7 @@ sealed class SimulatedChat(ChatChannelRouting routing, Action<string> log) : IDi
         _chatLoadAttempted = false;
         _recentChatMessages.Clear();
         _recentChatSpeakers.Clear();
-        _chatGroups = [];
-        _chatBursts = [];
-        _chatGroupCumulative = [];
+        _ambientChat = null;
         _chatGroupById = new(StringComparer.OrdinalIgnoreCase);
         _chatKeywordIndex = new(StringComparer.OrdinalIgnoreCase);
     }
@@ -201,7 +180,7 @@ sealed class SimulatedChat(ChatChannelRouting routing, Action<string> log) : IDi
     }
 
     ChatRoom? FakeChatRoomOf(ClientState conn, ChatChannelKind kind) =>
-        ChatRoom.Of(conn, kind) is { } room
+        (kind != ChatChannelKind.Trade || simulateTrade) && ChatRoom.Of(conn, kind) is { } room
         && routing.Find(kind, room.Channel)?.Type == ChatChannelRouteType.Fake ? room : null;
 
     static bool IsChatListener(ClientState conn) => ChatRoom.IsListener(conn);
@@ -241,7 +220,7 @@ sealed class SimulatedChat(ChatChannelRouting routing, Action<string> log) : IDi
     {
         if (room.Pending.Count == 0 && now >= room.NextChat)
         {
-            EnqueueChatEventLocked(room, now);
+            EnqueueChatEvent(room, now);
             room.NextChat = now.AddSeconds(NextGlobalChatGapSeconds());
         }
         List<(DateTime DueUtc, string Speaker, string Group, string Text)>? due = null;
@@ -318,104 +297,16 @@ sealed class SimulatedChat(ChatChannelRouting routing, Action<string> log) : IDi
         return pick;
     }
 
-    void EnqueueChatEventLocked(FakeChatRoom room, DateTime now)
+    void EnqueueChatEvent(FakeChatRoom room, DateTime now)
     {
+        var lines = _ambientChat!.NextEvent(_random, group => PickGroupMessage(group)!);
+        var speakerMap = new Dictionary<int, string>();
         var usedSpeakers = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        if (_chatBursts.Length > 0 && _random.NextDouble() < 0.58)
+        foreach (var line in lines)
         {
-            var burst = _chatBursts[_random.Next(_chatBursts.Length)];
-            var speakerMap = new Dictionary<int, string>();
-            foreach (var line in burst.Lines)
-            {
-                if (!speakerMap.TryGetValue(line.Speaker, out string? spk))
-                    speakerMap[line.Speaker] = spk = PickChatSpeaker(usedSpeakers);
-                room.Pending.Add((now.AddSeconds(Math.Clamp(line.DelaySeconds, 0, 45)), spk, line.Group, line.Text));
-            }
-            return;
-        }
-        double pick = _random.NextDouble() * _chatGroupCumulative[^1];
-        int idx = Array.BinarySearch(_chatGroupCumulative, pick);
-        var group = _chatGroups[Math.Min(idx < 0 ? ~idx : idx, _chatGroups.Length - 1)];
-
-        if (PickGroupMessage(group) is not { } msg) return;
-        string speaker = PickChatSpeaker(usedSpeakers);
-        room.Pending.Add((now, speaker, group.Id, msg));
-
-        bool isGoodLuck = !msg.EndsWith('?') && !Regex.IsMatch(msg, @"\b(can i have|give me|free|beg|poor|broke|never|0 )\b", RegexOptions.IgnoreCase)
-            && (group.Id == "loot_drops" || Regex.IsMatch(msg, @"\b(first ever|finally|just got|just dropped|dropped a|dropped my|6 linked|six linked|lucky|thank god|sold my|500div|mageblood|mirror|headhunter)\b", RegexOptions.IgnoreCase));
-        bool isBadLuck = Regex.IsMatch(msg, @"\b(bricked|poofed|ripped|died|deaths|unlucky|cursed|scam|worst|broke|poor|lag|crash)\b", RegexOptions.IgnoreCase);
-        bool isNewsOrMeme = group.Id == "memes_banter" || Regex.IsMatch(msg, @"\b(just released|remake|patch|update|poe2|d4|diablo|twitch|nerf|buff|league|reddit)\b", RegexOptions.IgnoreCase);
-
-        if (isGoodLuck)
-        {
-            if (_random.NextDouble() < 0.70)
-            {
-                int replies = 1 + _random.Next(3);
-                int delay = 2 + _random.Next(3);
-                for (int r = 0; r < replies; r++)
-                {
-                    string followGroupId = r == replies - 1 && _random.NextDouble() < 0.25 ? "vaal_gambling" : "reactions_gratz";
-                    if (_chatGroupById.TryGetValue(followGroupId, out var fg))
-                    {
-                        string fmsg = followGroupId == "vaal_gambling" ? "don't forget to vaal" : PickGroupMessage(fg) ?? "gz";
-                        room.Pending.Add((now.AddSeconds(delay), PickChatSpeaker(usedSpeakers), fg.Id, fmsg));
-                        delay += 2 + _random.Next(3);
-                    }
-                }
-            }
-            return;
-        }
-        if (isBadLuck)
-        {
-            if (_random.NextDouble() < 0.65)
-            {
-                int replies = 1 + (_random.NextDouble() < 0.45 ? 1 : 0);
-                int delay = 2 + _random.Next(3);
-                for (int r = 0; r < replies; r++)
-                {
-                    string followGroupId = r == 0 && _random.NextDouble() < 0.65 ? "reactions_sympathy" : "reactions_humor";
-                    if (_chatGroupById.TryGetValue(followGroupId, out var fg) && PickGroupMessage(fg) is { } fmsg)
-                    {
-                        room.Pending.Add((now.AddSeconds(delay), PickChatSpeaker(usedSpeakers), fg.Id, fmsg));
-                        delay += 2 + _random.Next(3);
-                    }
-                }
-            }
-            return;
-        }
-        if (isNewsOrMeme)
-        {
-            if (_random.NextDouble() < 0.65)
-            {
-                int delay = 2 + _random.Next(3);
-                if (_chatGroupById.TryGetValue("reactions_humor", out var fg) && PickGroupMessage(fg) is { } fmsg)
-                    room.Pending.Add((now.AddSeconds(delay), PickChatSpeaker(usedSpeakers), fg.Id, fmsg));
-                if (_random.NextDouble() < 0.50)
-                    EnqueueRepliesToPlayerLocked(room, now.AddSeconds(delay + 1), speaker, msg);
-            }
-            return;
-        }
-        if (_random.NextDouble() < 0.60)
-            EnqueueRepliesToPlayerLocked(room, now, speaker, msg);
-    }
-
-    internal static (GlobalChatGroup[] Groups, GlobalChatBurst[] Bursts) LoadGlobalChatLibrary(Action<string> log)
-    {
-        try
-        {
-            using var resource = typeof(SimulatedChat).Assembly.GetManifestResourceStream("GlobalChat.SimulatedChat")
-                ?? throw new InvalidDataException("The simulated chat library is missing.");
-            using var text = new StreamReader(resource);
-            using var compressed = new MemoryStream(Convert.FromBase64String(text.ReadToEnd()));
-            using var stream = new BrotliStream(compressed, CompressionMode.Decompress);
-            var library = JsonSerializer.Deserialize(stream, SimulatedChatJsonContext.Default.GlobalChatLibrary);
-            return library is null ? ([], []) : (library.Groups, library.Bursts);
-        }
-        catch (Exception error) when (error is IOException or InvalidDataException or JsonException or FormatException)
-        {
-            log($"failed to load simulated chat: {error.Message}");
-            return ([], []);
+            if (!speakerMap.TryGetValue(line.Speaker, out string? speaker))
+                speakerMap[line.Speaker] = speaker = PickChatSpeaker(usedSpeakers);
+            room.Pending.Add((now.AddSeconds(Math.Clamp(line.DelaySeconds, 0, 45)), speaker, line.Group, line.Text));
         }
     }
 }

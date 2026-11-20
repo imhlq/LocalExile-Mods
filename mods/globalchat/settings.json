@@ -1,6 +1,12 @@
 {
-  "version": 7,
+  "version": 9,
   "settings": {
+    "enableTraderBots": {
+      "type": "bool",
+      "default": true,
+      "label": "Trader bots",
+      "description": "Enable trader bots server-wide. They post equipment and service ads and answer item requests. Players can opt out with /tradebots off."
+    },
     "discordBotToken": {
       "type": "text",
       "format": "password",
@@ -101,7 +107,11 @@
     },
     "tradeChannels": {
       "type": "map",
-      "default": {},
+      "default": {
+        "8": {
+          "type": "fake"
+        }
+      },
       "label": "Trade channel routes",
       "description": "Add or remove numbered channel routes. Use channel numbers from 1 to 65534.",
       "value": {

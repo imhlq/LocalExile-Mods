@@ -4,6 +4,8 @@
 
   <ItemGroup>
     <EmbeddedResource Include="simulated-chat.br.txt" LogicalName="GlobalChat.SimulatedChat" WithCulture="false" />
+    <EmbeddedResource Include="chat-baseline.json" LogicalName="GlobalChat.ChatBaseline" />
+    <EmbeddedResource Include="trade-listing-examples.json" LogicalName="GlobalChat.TradeListings" />
     <None Update="icon.png" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 

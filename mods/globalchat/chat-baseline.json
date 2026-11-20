@@ -1,0 +1,54 @@
+{
+  "GroupCounts": {
+    "greetings_parting": 161,
+    "reactions_gratz": 261,
+    "reactions_sympathy": 92,
+    "reactions_humor": 569,
+    "vaal_gambling": 648,
+    "loot_drops": 730,
+    "crafting_gear": 432,
+    "campaign_leveling": 140,
+    "builds_skills": 1140,
+    "atlas_endgame": 791,
+    "economy_market": 1201,
+    "lfg_sharing": 135,
+    "questions_help": 2161,
+    "answers_advice": 304,
+    "complaints_rng": 188,
+    "memes_banter": 454,
+    "short_quips": 9108,
+    "general_chat": 5785
+  },
+  "EventCounts": [
+    {
+      "Length": 1,
+      "Repeats": 0,
+      "Count": 19570
+    },
+    {
+      "Length": 2,
+      "Repeats": 0,
+      "Count": 419
+    },
+    {
+      "Length": 2,
+      "Repeats": 1,
+      "Count": 1451
+    },
+    {
+      "Length": 3,
+      "Repeats": 0,
+      "Count": 66
+    },
+    {
+      "Length": 3,
+      "Repeats": 1,
+      "Count": 76
+    },
+    {
+      "Length": 3,
+      "Repeats": 2,
+      "Count": 188
+    }
+  ]
+}

@@ -66,12 +66,24 @@ public sealed class GlobalChatMod : IMod
         if (whisperServer is not null || routing.FallbackServer is not null)
             ChatRoutes.Use(owner, whisperServer, endpoints, routing.FallbackServer);
 
+        bool enableTraderBots = settings.EnableTraderBots != false;
         if (routing.HasFakeChat)
         {
-            var simulation = new SimulatedChat(routing, mod.Log);
+            var simulation = new SimulatedChat(routing, mod.Log, simulateTrade: !enableTraderBots);
             mod.Lifetime.Own(simulation);
             GameEvents.ChatPosted.Add(owner, simulation.OnPlayerChat);
             simulation.Start();
+        }
+        var traders = new TraderBots(routing, log: mod.Log, enabled: enableTraderBots);
+        mod.Lifetime.Own(traders);
+        GameEvents.Command(owner, "tradebots", TraderBots.CommandUsage, traders.Command, "off", "on", "status");
+        if (enableTraderBots)
+        {
+            GameEvents.ChatPosted.Add(owner, traders.OnPlayerChat);
+            GameEvents.Tick.Add(owner, traders.Tick);
+            GameEvents.ChatWhisper.Add(owner, traders.Whisper);
+            GameEvents.TradeAction.Add(owner, traders.TradeAction);
+            GameEvents.PlayerLeaving.Add(owner, traders.Leave);
         }
 
         var routes = routing.DiscordRoutes(mod.Log).ToArray();

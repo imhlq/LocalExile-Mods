@@ -8,7 +8,7 @@ enum ChatChannelRouteType { Blank, Server, Discord, Fake }
 
 sealed record ChannelChoice(JsonNode? Type, JsonNode? DiscordChannelId, JsonNode? Address, JsonNode? Port, JsonNode? SendToDiscord = null);
 sealed record ChatChoices(Dictionary<string, ChannelChoice>? GlobalChannels, Dictionary<string, ChannelChoice>? TradeChannels,
-    ChannelChoice? FallbackRoute = null, string? DiscordBotToken = null);
+    ChannelChoice? FallbackRoute = null, string? DiscordBotToken = null, bool? EnableTraderBots = null);
 
 readonly record struct ChatRoom(ChatChannelKind Kind, ushort Channel, byte Language)
 {

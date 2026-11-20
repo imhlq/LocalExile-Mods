@@ -3,9 +3,9 @@
   "name": "Global Chat",
   "description": "Talk to other LocalExile players through a shared chat server, with optional Discord and simulated chat routes.",
   "author": "JetStream",
-  "version": "1.2.16",
+  "version": "1.2.35",
   "compatibleClientVersions": ["0.5.2-beta"],
   "kind": "feature",
   "userSettingsFile": "globalchat.json",
-  "depends": []
+  "depends": ["Game"]
 }

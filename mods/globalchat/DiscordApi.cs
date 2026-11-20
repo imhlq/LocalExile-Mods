@@ -26,7 +26,7 @@ sealed class DiscordApi
         this.time = time ?? TimeProvider.System;
         http.BaseAddress ??= new Uri("https://discord.com/api/v10/");
         http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bot", token);
-        http.DefaultRequestHeaders.UserAgent.ParseAdd("DiscordBot (https://github.com/LocalExile/LocalExile-Mods, 1.2.16)");
+        http.DefaultRequestHeaders.UserAgent.ParseAdd("DiscordBot (https://github.com/LocalExile/LocalExile-Mods, 1.2.35)");
     }
 
     internal async Task<JsonElement> Request(HttpMethod method, string path, string? body, CancellationToken cancel)
